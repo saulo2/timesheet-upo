@@ -99,15 +99,16 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
     fun save (groupId : groupTablePrimaryKeyColumnType)
 	     (rowId : rowTablePrimaryKeyColumnType)
 	     (date : time)
-	     (contents : $(cellTableOtherColumns)) : transaction unit =
-	Sql.easy_insertOrUpdate [[cellTableGroupForeignKeyColumnName = _,
-				  cellTableRowForeignKeyColumnName = _,
-				  cellTableDateColumnName = _]]
-				cellTable
-				({cellTableGroupForeignKeyColumnName = groupId,
-				  cellTableRowForeignKeyColumnName = rowId,
-				  cellTableDateColumnName = date} ++ contents)
-
+	     (contents : cellContent) : transaction unit =
+	@Sql.easy_insertOrUpdate
+	 [[cellTableGroupForeignKeyColumnName = _, cellTableRowForeignKeyColumnName = _, cellTableDateColumnName = _]]
+	 !
+	 _
+	 cellTableOtherColumnsInjectable
+	 _
+	 cellTableOtherColumnsFolder cellTable
+	 ({cellTableGroupForeignKeyColumnName = groupId, cellTableRowForeignKeyColumnName = rowId, cellTableDateColumnName = date} ++ contents)
+	
     fun loadSheet (start : time) (count : int) : transaction sheet =
 	let val startTime = midnight start
 	    val endTime = sum startTime count
