@@ -40,6 +40,8 @@ signature SCHEMA = sig
     constraint [cellTableGroupForeignKeyColumnName] ~ [cellTableDateColumnName]
     constraint [cellTableRowForeignKeyColumnName] ~ [cellTableDateColumnName]
     con cellTableOtherColumns :: {Type}
+    val	cellTableOtherColumnsInjectable : $(map sql_injectable cellTableOtherColumns)
+    val	cellTableOtherColumnsFolder : folder cellTableOtherColumns
     constraint [cellTableGroupForeignKeyColumnName, cellTableRowForeignKeyColumnName, cellTableDateColumnName] ~ cellTableOtherColumns
     con cellTableOtherConstraints :: {{Unit}}
     constraint [Pkey = [cellTableGroupForeignKeyColumnName, cellTableRowForeignKeyColumnName]] ~ cellTableOtherConstraints
@@ -98,26 +100,13 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 	     (rowId : rowTablePrimaryKeyColumnType)
 	     (date : time)
 	     (contents : $(cellTableOtherColumns)) : transaction unit =
-	count <- oneRowE1(SELECT COUNT( * )
-			  FROM cellTable AS C
-			  WHERE C.{cellTableGroupForeignKeyColumnName} = {[groupId]}
-			    AND C.{cellTableRowForeignKeyColumnName} = {[rowId]}
-			    AND C.{cellTableDateColumnName} = {[date]});
-(*	
-	if count = 0 then
-	    dml (INSERT INTO cellTable (
-		     {cellTableGroupForeignKeyColumnName},
-		     {cellTableRowForeignKeyColumnName},
-		     {cellTableDateColumnName})
-		 VALUES ({[groupId]}, {[rowId]}, {[date]}))
-	else
-	    dml (UPDATE cellTable
-		 WHERE {}  = {[projectId]}
-		   AND TASK_ID = {[taskId]}
-		   AND DATE = {[date]})
-*)
-	
-	return ()
+	Sql.easy_insertOrUpdate [[cellTableGroupForeignKeyColumnName = _,
+				  cellTableRowForeignKeyColumnName = _,
+				  cellTableDateColumnName = _]]
+				cellTable
+				({cellTableGroupForeignKeyColumnName = groupId,
+				  cellTableRowForeignKeyColumnName = rowId,
+				  cellTableDateColumnName = date} ++ contents)
 
     fun loadSheet (start : time) (count : int) : transaction sheet =
 	let val startTime = midnight start
