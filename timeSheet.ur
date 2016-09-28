@@ -132,25 +132,21 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 					 end)
 				     [];
 
-(*	    
-	projectRows <- query (SELECT
-				P.ID AS ID,
-				P.NAME AS NAME,
-				P.VISIBLE AS VISIBLE
-			      FROM project AS P
-			      WHERE P.USER_ID = {[userId]}
-			      ORDER BY P.NAME DESC)
-			     (fn r projectRows =>
-				 let val projectIdTaskRowsPairs = List.filter (fn (projectId, _) => projectId = r.ID) projectIdTaskRowsPairs
-				     val taskRows = List.mp (fn (_, taskRow) => taskRow) projectIdTaskRowsPairs
-				     val projectRow = (r.ID, r.NAME, r.VISIBLE, taskRows)
-				 in
-				     return (projectRow :: projectRows)
-				 end) [];	    
-*)
+	    groups <- query (SELECT
+			       G.{groupTablePrimaryKeyColumnName} AS Id,
+			       G.{{groupTableOtherColumns}}
+			     FROM groupTable AS G)
+			    (fn r groups =>
+				let val groupIdRowPairs = List.filter (fn (groupId, _) => groupId = r.Id) groupIdRowPairs
+				    val rows = List.mp (fn (_, row) => row) groupIdRowPairs
+				    val group = {Content = r.G, Rows = rows}
+				in
+				    return (group :: groups)
+				end)
+			    [];
 
 	    let val t = groupIdRowPairs in
-		return {Dates = dates, Groups = []}
+		return {Dates = dates, Groups = groups}
 	    end
 	end
 end
