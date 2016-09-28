@@ -1,15 +1,17 @@
 signature SCHEMA = sig
     con groupTablePrimaryKeyColumnName :: Name
     con groupTablePrimaryKeyColumnType :: Type
+    val groupTablePrimaryKeyColumnTypeEq : eq groupTablePrimaryKeyColumnType
     con groupTableOtherColumns :: {Type}
     constraint [groupTablePrimaryKeyColumnName] ~ groupTableOtherColumns
     con groupTableOtherConstraints :: {{Unit}}
     constraint [Pkey = [groupTablePrimaryKeyColumnName]] ~ groupTableOtherConstraints
     val groupTable : sql_table ([groupTablePrimaryKeyColumnName = groupTablePrimaryKeyColumnType] ++ groupTableOtherColumns)
-			       ([Pkey = [groupTablePrimaryKeyColumnName]] ++ groupTableOtherConstraints)
+			       ([Pkey = [groupTablePrimaryKeyColumnName]] ++ groupTableOtherConstraints)		     
 
     con rowTablePrimaryKeyColumnName :: Name
     con rowTablePrimaryKeyColumnType :: Type
+    val rowTablePrimaryKeyColumnTypeEq : eq rowTablePrimaryKeyColumnType
     con rowTableOtherColumns :: {Type}
     constraint [rowTablePrimaryKeyColumnName] ~ rowTableOtherColumns
     con rowTableOtherConstraints :: {{Unit}}
@@ -48,25 +50,31 @@ signature SCHEMA = sig
 end
 
 signature SERVICE = sig
-    type content
+    type cellContent
+    type rowContent
+    type groupContent
 
-    type cell = {Content : option content, Save : option content -> transaction unit}
-    type row = {Label : string, Cells : list cell}
-    type group = {Label : string, Rows : list row}
-    type sheet = {Header : list time, Groups : list group}
+    type cell = {Content : option cellContent}
+    type row = {Content : rowContent, Cells : list cell}
+    type group = {Content : groupContent, Rows : list row}
+    type sheet = {Dates : list time, Groups : list group}
 
     val loadSheet : time -> int -> transaction sheet
 end
 
-functor Service (Schema : SCHEMA) : SERVICE = struct
-    open Schema
-    
-    type content = $(cellTableOtherColumns)
+functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOtherColumns)
+                                       where type rowContent = $(S.rowTableOtherColumns)
+                                       where type groupContent = $(S.groupTableOtherColumns) = struct
+    open S
 
-    type cell = {Content : option content, Save : option content -> transaction unit}
-    type row = {Label : string, Cells : list cell}
-    type group = {Label : string, Rows : list row}
-    type sheet = {Header : list time, Groups : list group}
+    type cellContent = $(S.cellTableOtherColumns)
+    type rowContent = $(S.rowTableOtherColumns)
+    type groupContent = $(S.groupTableOtherColumns)
+
+    type cell = {Content : option cellContent}
+    type row = {Content : rowContent, Cells : list cell}
+    type group = {Content : groupContent, Rows : list row}
+    type sheet = {Dates : list time, Groups : list group}
 
     fun midnight (time: time): time =
 	let val t = Datetime.fromTime time in
@@ -87,11 +95,12 @@ functor Service (Schema : SCHEMA) : SERVICE = struct
     fun loadSheet (start : time) (count : int) : transaction sheet =
 	let val startTime = midnight start
 	    val endTime = sum startTime count
-	    val header = timeRange start (count - 1)
+	    val dates = timeRange start (count - 1)
 	in
 	    cellRecords <- queryL (SELECT
-				     C.{cellTableGroupForeignKeyColumnName} AS GroupId,
-				     C.{cellTableRowForeignKeyColumnName} AS RowId,
+				     G.{groupTablePrimaryKeyColumnName} AS GroupId,
+				     R.{rowTablePrimaryKeyColumnName} AS RowId,
+				     C.{cellTableDateColumnName} AS Date,
 				     C.{{cellTableOtherColumns}}
 				   FROM groupTable AS G
 				     INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
@@ -101,26 +110,47 @@ functor Service (Schema : SCHEMA) : SERVICE = struct
 				   WHERE
 				     {[startTime]} <= C.{cellTableDateColumnName}
 				     AND C.{cellTableDateColumnName} <= {[endTime]});
-	    
-	    groupIdRowsPairs <- query (SELECT
-					 G.{}
-				       FROM groupTable AS G
-					 INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
-					 INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName})
-				      (fn r projectIdTaskRowPairs =>
-					  let val entryCells = List.mp (fn date => case List.find (fn entry => entry.PROJECT_ID = r.PROJECT_ID &&
-														 entry.TASK_ID = r.ID &&
-													       entry.DATE = date) entries of
-										       None => (date, None)
-										     | Some entry => (date, Some entry.TIME)) dates
-					      val taskRow = (r.ID, r.NAME, r.VISIBLE, entryCells)
-					      val projectIdTaskRowPair = (r.PROJECT_ID, taskRow)
-					    in
-					      return (projectIdTaskRowPair :: projectIdTaskRowPairs)
-					  end) []
-	    
-	    let val t = cellRecords in
-		return {Header = header, Groups = []}
+
+	    groupIdRowPairs <- query (SELECT
+					G.{groupTablePrimaryKeyColumnName} AS GroupId,
+					R.{rowTablePrimaryKeyColumnName} AS RowId,
+					R.{{rowTableOtherColumns}}
+				      FROM groupTable AS G
+					INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
+					INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName})
+				     (fn r groupIdRowPairs =>
+					 let val cells = List.mp (fn date => case List.find (fn cellRecord => cellRecord.GroupId = r.GroupId &&
+													      cellRecord.RowId = r.RowId &&
+													      cellRecord.Date = date) cellRecords of
+										 None => {Content = None}
+									       | Some cellRecord => {Content = Some cellRecord.C})
+								 dates
+					     val row = {Content = r.R, Cells = cells}
+					     val groupIdRowPair = (r.GroupId, row)
+					 in
+					     return (groupIdRowPair :: groupIdRowPairs)
+					 end)
+				     [];
+
+(*	    
+	projectRows <- query (SELECT
+				P.ID AS ID,
+				P.NAME AS NAME,
+				P.VISIBLE AS VISIBLE
+			      FROM project AS P
+			      WHERE P.USER_ID = {[userId]}
+			      ORDER BY P.NAME DESC)
+			     (fn r projectRows =>
+				 let val projectIdTaskRowsPairs = List.filter (fn (projectId, _) => projectId = r.ID) projectIdTaskRowsPairs
+				     val taskRows = List.mp (fn (_, taskRow) => taskRow) projectIdTaskRowsPairs
+				     val projectRow = (r.ID, r.NAME, r.VISIBLE, taskRows)
+				 in
+				     return (projectRow :: projectRows)
+				 end) [];	    
+*)
+
+	    let val t = groupIdRowPairs in
+		return {Dates = dates, Groups = []}
 	    end
 	end
 end
