@@ -1,3 +1,6 @@
+database postgresql://timesheet:timesheet@localhost:5432/timesheet
+sql create.sql
+
 $/datetime
 $/list
 

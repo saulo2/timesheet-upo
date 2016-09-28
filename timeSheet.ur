@@ -2,6 +2,7 @@ signature SCHEMA = sig
     con groupTablePrimaryKeyColumnName :: Name
     con groupTablePrimaryKeyColumnType :: Type
     val groupTablePrimaryKeyColumnTypeEq : eq groupTablePrimaryKeyColumnType
+    val groupTablePrimaryKeyColumnTypeSqlInjectable : sql_injectable groupTablePrimaryKeyColumnType
     con groupTableOtherColumns :: {Type}
     constraint [groupTablePrimaryKeyColumnName] ~ groupTableOtherColumns
     con groupTableOtherConstraints :: {{Unit}}
@@ -12,6 +13,7 @@ signature SCHEMA = sig
     con rowTablePrimaryKeyColumnName :: Name
     con rowTablePrimaryKeyColumnType :: Type
     val rowTablePrimaryKeyColumnTypeEq : eq rowTablePrimaryKeyColumnType
+    val rowTablePrimaryKeyColumnTypeSqlInjectable : sql_injectable rowTablePrimaryKeyColumnType
     con rowTableOtherColumns :: {Type}
     constraint [rowTablePrimaryKeyColumnName] ~ rowTableOtherColumns
     con rowTableOtherConstraints :: {{Unit}}
@@ -92,6 +94,31 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
     fun timeRange (start: time) (count: int): list time =
 	List.mp (fn days => sum start days) (intRange 0 count)
 
+    fun save (groupId : groupTablePrimaryKeyColumnType)
+	     (rowId : rowTablePrimaryKeyColumnType)
+	     (date : time)
+	     (contents : $(cellTableOtherColumns)) : transaction unit =
+	count <- oneRowE1(SELECT COUNT( * )
+			  FROM cellTable AS C
+			  WHERE C.{cellTableGroupForeignKeyColumnName} = {[groupId]}
+			    AND C.{cellTableRowForeignKeyColumnName} = {[rowId]}
+			    AND C.{cellTableDateColumnName} = {[date]});
+(*	
+	if count = 0 then
+	    dml (INSERT INTO cellTable (
+		     {cellTableGroupForeignKeyColumnName},
+		     {cellTableRowForeignKeyColumnName},
+		     {cellTableDateColumnName})
+		 VALUES ({[groupId]}, {[rowId]}, {[date]}))
+	else
+	    dml (UPDATE cellTable
+		 WHERE {}  = {[projectId]}
+		   AND TASK_ID = {[taskId]}
+		   AND DATE = {[date]})
+*)
+	
+	return ()
+
     fun loadSheet (start : time) (count : int) : transaction sheet =
 	let val startTime = midnight start
 	    val endTime = sum startTime count
@@ -167,16 +194,9 @@ table entryTable : {ProjectId : int, TaskId : int, Date : time, Time : float} PR
       CONSTRAINT PROJECT_ID_IS_FOREIGN_KEY FOREIGN KEY ProjectId REFERENCES projectTable (Id),
       CONSTRAINT TASK_ID_IS_FOREIGN_KEY FOREIGN KEY TaskId REFERENCES taskTable (Id)
 
-structure Service1 = Service (struct
-				  val groupTable = projectTable
-				  val rowTable = taskTable
-				  val groupRowTable = projectTaskTable
-				  val cellTable = entryTable
-			      end)
-
-structure Service2 = Service (struct
-				  val groupTable = taskTable
-				  val rowTable = projectTable
-				  val groupRowTable = projectTaskTable
-				  val cellTable = entryTable
-			      end)
+structure Service = Service (struct
+				 val groupTable = projectTable
+				 val rowTable = taskTable
+				 val groupRowTable = projectTaskTable
+				 val cellTable = entryTable
+			     end)
