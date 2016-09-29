@@ -159,13 +159,69 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 				    return (group :: groups)
 				end)
 			    [];
-
+	    
 	    return {Dates = dates, Groups = groups}
 	end
 end
 
 
 
+signature MODEL = sig
+(*
+type entryCellModel = id *
+		      source string *
+		      (keyEvent -> transaction unit)
+
+type taskRowModel = int *
+		    string *
+		    source bool *
+		    list entryCellModel *
+		    (mouseEvent -> transaction unit)
+
+type projectRowModel = int *
+		       string *
+		       source bool *		       
+		       list taskRowModel *
+		       (mouseEvent -> transaction unit)
+
+type timeSheetModel = source (time *
+			      int *
+			      list time *
+			      list projectRowModel) *
+		      source bool *
+		      source bool *
+		      (mouseEvent -> transaction unit) *
+		      (mouseEvent -> transaction unit) *
+		      (mouseEvent -> transaction unit) *
+		      (mouseEvent -> transaction unit) *
+		      (mouseEvent -> transaction unit)								   
+*)
+    type cellContent
+    type rowContent
+    type groupContent
+
+    type cell = {Id: id,
+		 Content : source (option cellContent),
+		 Save : keyEvent -> transaction unit}
+		
+    type row = {Content : rowContent,
+		Visible : source bool,
+		Cells : list cell,
+		toggleVisibility : mouseEvent -> transaction unit}
+
+    type group = {Content : groupContent,
+		  Visible : source bool,
+		  Rows : list row,
+		  toggleVisibility : mouseEvent -> transaction unit}
+		 
+    type sheet = {Dates : list time,
+		  Groups : list group}
+
+    val loadSheet : time -> int -> transaction sheet
+end
+
+
+		    
 table projectTable : {Id : int, Nm : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
 
