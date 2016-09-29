@@ -54,14 +54,21 @@ signature SCHEMA = sig
 end
 
 signature SERVICE = sig
-    type cellContent
-    type rowContent
+    type cellContent	 
+    type rowContent	 
     type groupContent
 
-    type cell = {Content : option cellContent, Save : cellContent -> transaction unit}
-    type row = {Content : rowContent, Cells : list cell}
-    type group = {Content : groupContent, Rows : list row}
-    type sheet = {Dates : list time, Groups : list group}
+    type cell = {Content : option cellContent,
+		 Save : cellContent -> transaction unit}
+		
+    type row = {Content : rowContent,
+		Cells : list cell}
+	       
+    type group = {Content : groupContent,
+		  Rows : list row}
+		 
+    type sheet = {Dates : list time,
+		  Groups : list group}
 
     val loadSheet : time -> int -> transaction sheet
 end
@@ -70,15 +77,22 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
                                        where type rowContent = $(S.rowTableOtherColumns)
                                        where type groupContent = $(S.groupTableOtherColumns) = struct
     open S
+											     
+    type cellContent = $(cellTableOtherColumns)		       
+    type rowContent = $(rowTableOtherColumns)		      
+    type groupContent = $(groupTableOtherColumns)
 
-    type cellContent = $(S.cellTableOtherColumns)
-    type rowContent = $(S.rowTableOtherColumns)
-    type groupContent = $(S.groupTableOtherColumns)
-
-    type cell = {Content : option cellContent, Save : cellContent -> transaction unit}
-    type row = {Content : rowContent, Cells : list cell}
-    type group = {Content : groupContent, Rows : list row}
-    type sheet = {Dates : list time, Groups : list group}
+    type cell = {Content : option cellContent,
+		 Save : cellContent -> transaction unit}
+		
+    type row = {Content : rowContent,
+		Cells : list cell}
+	       
+    type group = {Content : groupContent,
+		  Rows : list row}
+		 
+    type sheet = {Dates : list time,
+		  Groups : list group}
 
     fun midnight (time: time): time =
 	let val t = Datetime.fromTime time in
@@ -110,19 +124,19 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 	    val endTime = sum startTime count
 	    val dates = timeRange start (count - 1)
 	in
-	    cellRecords <- queryL (SELECT
-				     G.{groupTablePrimaryKeyColumnName} AS GroupId,
-				     R.{rowTablePrimaryKeyColumnName} AS RowId,
-				     C.{cellTableDateColumnName} AS Date,
-				     C.{{cellTableOtherColumns}}
-				   FROM groupTable AS G
-				     INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
-				     INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName}
-				     INNER JOIN cellTable AS C ON C.{cellTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
-				     AND C.{cellTableRowForeignKeyColumnName} = R.{rowTablePrimaryKeyColumnName}
-				   WHERE
-				     {[startTime]} <= C.{cellTableDateColumnName}
-				     AND C.{cellTableDateColumnName} <= {[endTime]});
+	    cells <- queryL (SELECT
+			       G.{groupTablePrimaryKeyColumnName} AS GroupId,
+			       R.{rowTablePrimaryKeyColumnName} AS RowId,
+			       C.{cellTableDateColumnName} AS Date,
+			       C.{{cellTableOtherColumns}}
+			     FROM groupTable AS G
+			       INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
+			       INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName}
+			       INNER JOIN cellTable AS C ON C.{cellTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
+			       AND C.{cellTableRowForeignKeyColumnName} = R.{rowTablePrimaryKeyColumnName}
+			     WHERE
+			       {[startTime]} <= C.{cellTableDateColumnName}
+			       AND C.{cellTableDateColumnName} <= {[endTime]});
 
 	    groupIdRowPairs <- query (SELECT
 					G.{groupTablePrimaryKeyColumnName} AS GroupId,
@@ -132,12 +146,12 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 					INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
 					INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName})
 				     (fn r groupIdRowPairs =>
-					 let val cells = List.mp (fn date => {Content = case List.find (fn cellRecord => cellRecord.GroupId = r.GroupId &&
-															 cellRecord.RowId = r.RowId &&
-															 cellRecord.Date = date)
-												       cellRecords of
+					 let val cells = List.mp (fn date => {Content = case List.find (fn cell => cell.GroupId = r.GroupId &&
+														   cell.RowId = r.RowId &&
+														   cell.Date = date)
+												       cells of
 											    None => None
-											  | Some cellRecord => Some cellRecord.C,
+											  | Some cell => Some cell.C,
 									      Save = save r.GroupId r.RowId date})
 								 dates
 					     val row = {Content = r.R, Cells = cells}
@@ -146,7 +160,7 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 					     return (groupIdRowPair :: groupIdRowPairs)
 					 end)
 				     [];
-
+	    
 	    groups <- query (SELECT
 			       G.{groupTablePrimaryKeyColumnName} AS Id,
 			       G.{{groupTableOtherColumns}}
@@ -159,7 +173,7 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 				    return (group :: groups)
 				end)
 			    [];
-	    
+
 	    return {Dates = dates, Groups = groups}
 	end
 end
@@ -167,61 +181,73 @@ end
 
 
 signature MODEL = sig
-(*
-type entryCellModel = id *
-		      source string *
-		      (keyEvent -> transaction unit)
-
-type taskRowModel = int *
-		    string *
-		    source bool *
-		    list entryCellModel *
-		    (mouseEvent -> transaction unit)
-
-type projectRowModel = int *
-		       string *
-		       source bool *		       
-		       list taskRowModel *
-		       (mouseEvent -> transaction unit)
-
-type timeSheetModel = source (time *
-			      int *
-			      list time *
-			      list projectRowModel) *
-		      source bool *
-		      source bool *
-		      (mouseEvent -> transaction unit) *
-		      (mouseEvent -> transaction unit) *
-		      (mouseEvent -> transaction unit) *
-		      (mouseEvent -> transaction unit) *
-		      (mouseEvent -> transaction unit)								   
-*)
     type cellContent
     type rowContent
     type groupContent
 
     type cell = {Id: id,
-		 Content : source (option cellContent),
+		 ContentSource : source (option cellContent),
 		 Save : keyEvent -> transaction unit}
 		
     type row = {Content : rowContent,
-		Visible : source bool,
-		Cells : list cell,
-		toggleVisibility : mouseEvent -> transaction unit}
+		Cells : list cell}
 
     type group = {Content : groupContent,
-		  Visible : source bool,
-		  Rows : list row,
-		  toggleVisibility : mouseEvent -> transaction unit}
-		 
-    type sheet = {Dates : list time,
-		  Groups : list group}
+		  Rows : list row}
+
+    type sheet = {DatesAndGroupsSource : source {Dates : list time,
+						 Groups : list group},
+		  Previous : mouseEvent -> transaction unit,
+		  Next : mouseEvent -> transaction unit,
+		  Minus : mouseEvent -> transaction unit,
+		  Plus : mouseEvent -> transaction unit}
 
     val loadSheet : time -> int -> transaction sheet
 end
 
+functor Model (S : SERVICE) : MODEL where type cellContent = S.cellContent
+                                    where type rowContent = S.rowContent
+                                    where type groupContent = S.groupContent = struct
+    open S							  
+											  
+    type cell = {Id: id,
+		 ContentSource : source (option cellContent),
+		 Save : keyEvent -> transaction unit}
+		
+    type row = {Content : rowContent,
+		Cells : list cell}
 
-		    
+    type group = {Content : groupContent,
+		  Rows : list row}
+
+    type sheet = {DatesAndGroupsSource : source {Dates : list time,
+						 Groups : list group},
+		  Previous : mouseEvent -> transaction unit,
+		  Next : mouseEvent -> transaction unit,
+		  Minus : mouseEvent -> transaction unit,
+		  Plus : mouseEvent -> transaction unit}
+
+    fun loadSheet (start : time) (count : int) : transaction sheet =
+	datesAndGroupsSource <- source {Dates = [], Groups = []};
+
+	let fun previous _ = return ()
+			     
+	    fun next _ = return ()
+
+	    fun minus _ = return ()
+
+	    fun plus _ = return () in
+
+	    return {DatesAndGroupsSource  = datesAndGroupsSource,
+		    Previous = previous,
+		    Next  = next,
+		    Minus = minus,
+		    Plus = plus}
+	end
+end
+
+
+
 table projectTable : {Id : int, Nm : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
 
