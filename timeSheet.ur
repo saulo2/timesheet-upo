@@ -58,7 +58,7 @@ signature SERVICE = sig
     type rowContent
     type groupContent
 
-    type cell = {Content : option cellContent}
+    type cell = {Content : option cellContent, Save : cellContent -> transaction unit}
     type row = {Content : rowContent, Cells : list cell}
     type group = {Content : groupContent, Rows : list row}
     type sheet = {Dates : list time, Groups : list group}
@@ -75,7 +75,7 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
     type rowContent = $(S.rowTableOtherColumns)
     type groupContent = $(S.groupTableOtherColumns)
 
-    type cell = {Content : option cellContent}
+    type cell = {Content : option cellContent, Save : cellContent -> transaction unit}
     type row = {Content : rowContent, Cells : list cell}
     type group = {Content : groupContent, Rows : list row}
     type sheet = {Dates : list time, Groups : list group}
@@ -102,11 +102,7 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 	     (contents : cellContent) : transaction unit =
 	@Sql.easy_insertOrUpdate
 	 [[cellTableGroupForeignKeyColumnName = _, cellTableRowForeignKeyColumnName = _, cellTableDateColumnName = _]]
-	 !
-	 _
-	 cellTableOtherColumnsInjectable
-	 _
-	 cellTableOtherColumnsFolder cellTable
+	 ! _ cellTableOtherColumnsInjectable _ cellTableOtherColumnsFolder cellTable
 	 ({cellTableGroupForeignKeyColumnName = groupId, cellTableRowForeignKeyColumnName = rowId, cellTableDateColumnName = date} ++ contents)
 	
     fun loadSheet (start : time) (count : int) : transaction sheet =
@@ -136,11 +132,13 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 					INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
 					INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName})
 				     (fn r groupIdRowPairs =>
-					 let val cells = List.mp (fn date => case List.find (fn cellRecord => cellRecord.GroupId = r.GroupId &&
-													      cellRecord.RowId = r.RowId &&
-													      cellRecord.Date = date) cellRecords of
-										 None => {Content = None}
-									       | Some cellRecord => {Content = Some cellRecord.C})
+					 let val cells = List.mp (fn date => {Content = case List.find (fn cellRecord => cellRecord.GroupId = r.GroupId &&
+															 cellRecord.RowId = r.RowId &&
+															 cellRecord.Date = date)
+												       cellRecords of
+											    None => None
+											  | Some cellRecord => Some cellRecord.C,
+									      Save = save r.GroupId r.RowId date})
 								 dates
 					     val row = {Content = r.R, Cells = cells}
 					     val groupIdRowPair = (r.GroupId, row)
@@ -162,9 +160,7 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 				end)
 			    [];
 
-	    let val t = groupIdRowPairs in
-		return {Dates = dates, Groups = groups}
-	    end
+	    return {Dates = dates, Groups = groups}
 	end
 end
 
