@@ -1,3 +1,21 @@
+fun midnight (time: time): time =
+    let val t = Datetime.fromTime time in
+	Datetime.toTime {Year = t.Year, Month = t.Month, Day = t.Day, Hour = 0, Minute = 0, Second = 0}
+    end
+
+fun sum (time: time) (days: int): time =
+    Datetime.toTime (Datetime.addDays days (Datetime.fromTime time))
+
+fun intRange (i: int) (j: int): list int =
+    if i > j
+    then []
+    else i :: (intRange (i + 1) j)
+	 
+fun timeRange (start: time) (count: int): list time =
+    List.mp (fn days => sum start days) (intRange 0 count)
+
+
+
 signature SCHEMA = sig
     con groupTablePrimaryKeyColumnName :: Name
     con groupTablePrimaryKeyColumnType :: Type
@@ -53,13 +71,15 @@ signature SCHEMA = sig
 					cellTableDateColumnName]] ++ cellTableOtherConstraints)
 end
 
+
+
 signature SERVICE = sig
     type cellContent	 
     type rowContent	 
     type groupContent
 
-    type cell = {Content : option cellContent,
-		 Save : cellContent -> transaction unit}
+    type cell = {ContentOption : option cellContent,
+		 Save : option cellContent -> transaction unit}
 		
     type row = {Content : rowContent,
 		Cells : list cell}
@@ -82,8 +102,8 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
     type rowContent = $(rowTableOtherColumns)		      
     type groupContent = $(groupTableOtherColumns)
 
-    type cell = {Content : option cellContent,
-		 Save : cellContent -> transaction unit}
+    type cell = {ContentOption : option cellContent,
+		 Save : option cellContent -> transaction unit}
 		
     type row = {Content : rowContent,
 		Cells : list cell}
@@ -94,30 +114,16 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
     type sheet = {Dates : list time,
 		  Groups : list group}
 
-    fun midnight (time: time): time =
-	let val t = Datetime.fromTime time in
-	    Datetime.toTime {Year = t.Year, Month = t.Month, Day = t.Day, Hour = 0, Minute = 0, Second = 0}
-	end
-
-    fun sum (time: time) (days: int): time =
-	Datetime.toTime (Datetime.addDays days (Datetime.fromTime time))
-
-    fun intRange (i: int) (j: int): list int =
-	if i > j
-	then []
-	else i :: (intRange (i + 1) j)
-
-    fun timeRange (start: time) (count: int): list time =
-	List.mp (fn days => sum start days) (intRange 0 count)
-
     fun save (groupId : groupTablePrimaryKeyColumnType)
 	     (rowId : rowTablePrimaryKeyColumnType)
 	     (date : time)
-	     (contents : cellContent) : transaction unit =
-	@Sql.easy_insertOrUpdate
-	 [[cellTableGroupForeignKeyColumnName = _, cellTableRowForeignKeyColumnName = _, cellTableDateColumnName = _]]
-	 ! _ cellTableOtherColumnsInjectable _ cellTableOtherColumnsFolder cellTable
-	 ({cellTableGroupForeignKeyColumnName = groupId, cellTableRowForeignKeyColumnName = rowId, cellTableDateColumnName = date} ++ contents)
+	     (contentOption : option cellContent) : transaction unit =
+	case contentOption of
+	    None => return ()
+	  | Some content => @Sql.easy_insertOrUpdate
+			     [[cellTableGroupForeignKeyColumnName = _, cellTableRowForeignKeyColumnName = _, cellTableDateColumnName = _]]
+			     ! _ cellTableOtherColumnsInjectable _ cellTableOtherColumnsFolder cellTable
+			     ({cellTableGroupForeignKeyColumnName = groupId, cellTableRowForeignKeyColumnName = rowId, cellTableDateColumnName = date} ++ content)
 	
     fun loadSheet (start : time) (count : int) : transaction sheet =
 	let val startTime = midnight start
@@ -146,12 +152,12 @@ functor Service (S : SCHEMA) : SERVICE where type cellContent = $(S.cellTableOth
 					INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
 					INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName})
 				     (fn r groupIdRowPairs =>
-					 let val cells = List.mp (fn date => {Content = case List.find (fn cell => cell.GroupId = r.GroupId &&
-														   cell.RowId = r.RowId &&
-														   cell.Date = date)
-												       cells of
-											    None => None
-											  | Some cell => Some cell.C,
+					 let val cells = List.mp (fn date => {ContentOption = case List.find (fn cell => cell.GroupId = r.GroupId &&
+															 cell.RowId = r.RowId &&
+															 cell.Date = date)
+													     cells of
+												  None => None
+												| Some cell => Some cell.C,
 									      Save = save r.GroupId r.RowId date})
 								 dates
 					     val row = {Content = r.R, Cells = cells}
@@ -185,8 +191,7 @@ signature MODEL = sig
     type rowContent
     type groupContent
 
-    type cell = {Id: id,
-		 ContentSource : source (option cellContent),
+    type cell = {ContentOptionSource : source (option cellContent),
 		 Save : keyEvent -> transaction unit}
 		
     type row = {Content : rowContent,
@@ -207,11 +212,10 @@ end
 
 functor Model (S : SERVICE) : MODEL where type cellContent = S.cellContent
                                     where type rowContent = S.rowContent
-                                    where type groupContent = S.groupContent = struct
-    open S							  
-											  
-    type cell = {Id: id,
-		 ContentSource : source (option cellContent),
+				    where type groupContent = S.groupContent = struct								       
+    open S
+								       
+    type cell = {ContentOptionSource : source (option cellContent),
 		 Save : keyEvent -> transaction unit}
 		
     type row = {Content : rowContent,
@@ -230,14 +234,62 @@ functor Model (S : SERVICE) : MODEL where type cellContent = S.cellContent
     fun loadSheet (start : time) (count : int) : transaction sheet =
 	datesAndGroupsSource <- source {Dates = [], Groups = []};
 
-	let fun previous _ = return ()
-			     
-	    fun next _ = return ()
+	let fun load (start : time) (count : int) : transaction unit =
+		sheet <- S.loadSheet start count;
+		groups <- List.mapM (fn group =>
+					rows <- List.mapM (fn row =>
+							      cells <- List.mapM (fn cell =>
+										     contentOptionSource <- source cell.ContentOption;
+										     let fun save (event : keyEvent) : transaction unit =
+											     if event.KeyCode = 13 then
+												 contentOption <- get contentOptionSource;
+												 cell.Save contentOption
+											     else
+												 return ()
+										     in
+											 return {ContentOptionSource = contentOptionSource, Save = save}
+										     end) row.Cells;
+							      return {Content = row.Content, Cells = cells}) group.Rows;
+					return {Content = group.Content, Rows = rows}) sheet.Groups;
+		set datesAndGroupsSource {Dates = sheet.Dates, Groups = groups}
 
-	    fun minus _ = return ()
+	    fun previous (_ : mouseEvent) : transaction unit =
+		datesAndGroups <- get datesAndGroupsSource;
+		case datesAndGroups.Dates of
+		    start :: _ => let val count = List.length datesAndGroups.Dates
+				      val start = sum start (0 - count)
+				  in
+				      load start count
+				  end
+		  | [] => return ()
 
-	    fun plus _ = return () in
+	    fun next (_ : mouseEvent) : transaction unit =
+		datesAndGroups <- get datesAndGroupsSource;
+		case datesAndGroups.Dates of
+		    start :: _ => let val count = List.length datesAndGroups.Dates
+				      val start = sum start count
+				  in
+				      load start count
+				  end
+		  | [] => return ()				  			  
+			  
+	    fun minus (_ : mouseEvent) : transaction unit =
+		datesAndGroups <- get datesAndGroupsSource;
+		case datesAndGroups.Dates of
+		    start :: _ :: _ => let val count = List.length datesAndGroups.Dates in
+					   load start (count - 1)
+				       end
+		  | _ => return ()
 
+	    fun plus (_ : mouseEvent) : transaction unit =
+		datesAndGroups <- get datesAndGroupsSource;
+		case datesAndGroups.Dates of
+		    start :: _ :: _ => let val count = List.length datesAndGroups.Dates in
+					   load start (count + 1)
+				       end
+		  | _ => return ()
+		
+	in
 	    return {DatesAndGroupsSource  = datesAndGroupsSource,
 		    Previous = previous,
 		    Next  = next,
@@ -246,7 +298,29 @@ functor Model (S : SERVICE) : MODEL where type cellContent = S.cellContent
 	end
 end
 
+							      
 
+signature VIEW_HELPER = sig
+    type cellContent
+    type rowContent
+    type groupContent
+end
+							      
+signature MODEL_AND_VIEW_HELPER = sig
+    structure Model : MODEL
+    structure ViewHelper : VIEW_HELPER
+end
+
+signature VIEW = sig    
+    val render : unit -> transaction (xml [Body = ()] [] [])
+end				  
+				  
+functor View (M : MODEL_AND_VIEW_HELPER) : VIEW = struct
+    fun render () : transaction (xml [Body = ()] [] []) = return <xml>
+      <div>
+      </div>
+    </xml>
+end
 
 table projectTable : {Id : int, Nm : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
