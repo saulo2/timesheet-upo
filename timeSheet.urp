@@ -2,6 +2,7 @@ database postgresql://timesheet:timesheet@localhost:5432/timesheet
 sql create.sql
 safeGet TimeSheet/application
 
+$/bootstrap/bootstrap3
 $/datetime
 $/list
 $/string

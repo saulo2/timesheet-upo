@@ -248,16 +248,16 @@ functor MakeModel (A : MAKE_MODEL_ARGUMENTS) : MODEL where type cellModelContent
 	datesAndGroupsSource <- source {Dates = [], Groups = []};
 
 	let fun load (start : time) (count : int) : transaction unit =
-		sheet <- Service.loadSheet start count;
+		sheet <- rpc (Service.loadSheet start count);
 		groups <- List.mapM (fn group =>
 					content <- convertGroupContent group.Content;
 					rows <- List.mapM (fn row =>
 							      content <- convertRowContent row.Content;
-							      cells <- List.mapM (fn cell =>
+							      cells <- List.mapM (fn (cell : Service.cell) =>
 										     content <- convertCellContent cell.ContentOption;
 										     let fun save (content : cellModelContent) : transaction unit =
 											     contentOption <- convertCellModelContent content;
-											     cell.Save contentOption
+											     rpc (cell.Save contentOption)
 										     in
 											 return {Content = content, Save = save}
 										     end) row.Cells;
@@ -325,20 +325,55 @@ signature MAKE_VIEW_ARGUMENTS = sig
     val rowHeaderView : Model.rowModelContent -> xbody
     val groupHeaderView : Model.groupModelContent -> xbody
 end
-		 
+
 functor MakeView (A : MAKE_VIEW_ARGUMENTS) : VIEW = struct
     open A
-	 
-    fun sheetView (sheetModel : Model.sheetModel) : xbody = <xml>
-    </xml>
+
+    open Bootstrap3
+
+    fun sheetView (sheetModel : Model.sheetModel) : xbody =
+	let val s = datesAndGroups <- signal sheetModel.DatesAndGroupsSource;
+		let val count = List.length datesAndGroups.Dates in
+		    return <xml>
+		      <table class="bs3_table table_bordered table_condensed table_responsive table_striped">
+			<thead>
+			  <tr>
+			    <th rowspan=2>Project</th>
+			    <th rowspan=2>Task</th>
+			    <th colspan={count}>
+			      <a class="glyphicon glyphicon_chevron_left" onclick={fn _ => sheetModel.Previous}/>
+			      Date
+			      <a class="glyphicon glyphicon_chevron_right" onclick={fn _ => sheetModel.Next}/>
+			      <span class="pull_right">
+				{if count > 1
+				 then <xml><a class="glyphicon glyphicon_minus_sign" onclick={fn _ => sheetModel.Minus}/></xml>
+				 else <xml></xml>}
+				
+				<a class="glyphicon glyphicon_plus_sign" onclick={fn _ => sheetModel.Plus}/>
+			      </span>
+			    </th>
+			  </tr>
+			  <tr>
+			    {List.mapX (fn date =>
+					   <xml>
+					     <th>{[timef "%D" date]}</th>
+					   </xml>) datesAndGroups.Dates}
+			  </tr>
+			</thead>
+		      </table>
+		    </xml>
+		end
+	in
+	    <xml>
+	      <dyn signal={s}/>
+	    </xml>
+	end
 end
 
-
-
-table projectTable : {Id : int, Nm : string} PRIMARY KEY Id,
+table projectTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
 
-table taskTable : {Id : int, Nm : string} PRIMARY KEY Id
+table taskTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm
 
 table projectTaskTable : {ProjectId : int, TaskId : int} PRIMARY KEY (ProjectId, TaskId),
@@ -371,10 +406,10 @@ structure View = MakeView (struct
 									    then None
 									    else Some {Time = readError content})
 								    
-								fun convertRowContent (content : {Nm : string}) : transaction string =
+								fun convertRowContent (content : {Nm : string, Ds : string}) : transaction string =
 								    return content.Nm
 								    
-								fun convertGroupContent (content : {Nm : string}) : transaction string =
+								fun convertGroupContent (content : {Nm : string, Ds : string}) : transaction string =
 								    return content.Nm
 							    end)
 						 
