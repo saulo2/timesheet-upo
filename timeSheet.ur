@@ -177,13 +177,13 @@ functor MakeService (A : MAKE_SERVICE_ARGUMENTS) : SERVICE where type cellConten
 	    return {Dates = dates, Groups = groups}
 	end
 
-    fun saveCell (id : cellId) (content : option cellContent) : transaction unit = 
-	case content of
+    fun saveCell (id : cellId) (contentOption : option cellContent) : transaction unit = 
+	case contentOption of
 	    None => return ()
 	  | Some content => @Sql.easy_insertOrUpdate
 			     [[cellTableGroupForeignKeyColumnName = _, cellTableRowForeignKeyColumnName = _, cellTableDateColumnName = _]]
 			     ! _ cellTableOtherColumnsInjectable _ cellTableOtherColumnsFolder cellTable
-			     ({cellTableGroupForeignKeyColumnName = id.GroupId, cellTableRowForeignKeyColumnName = id.RowId, cellTableDateColumnName = id.Date} ++ content)	
+			     ({cellTableGroupForeignKeyColumnName = id.GroupId, cellTableRowForeignKeyColumnName = id.RowId, cellTableDateColumnName = id.Date} ++ content)
 end
 
 
@@ -338,7 +338,7 @@ end
 signature MAKE_VIEW_ARGUMENTS = sig
     structure Model : MODEL
 
-    val cellView : Model.cellModelContent -> xbody
+    val cellView : Model.cellModelId -> Model.cellModelContent -> xbody
     val rowHeaderView : Model.rowModelContent -> xbody
     val groupHeaderView : Model.groupModelContent -> xbody
 end
@@ -355,21 +355,21 @@ functor MakeView (A : MAKE_VIEW_ARGUMENTS) : VIEW = struct
 			  | Some datesAndGroups =>
 			    let val count = List.length datesAndGroups.Dates in
 				<xml>
-				  <table class="bs3_table table_bordered table_condensed table_responsive table_striped">
+				  <table class="bs3_table table-bordered table_condensed" style="table-layout: fixed">
 				    <thead>
 				      <tr>
 					<th class="text-center" style="vertical-align: middle" rowspan=2>Project</th>
 					<th class="text-center" style="vertical-align: middle" rowspan=2>Task</th>
 					<th class="text-center" colspan={count}>
-					  <a class="glyphicon glyphicon_chevron_left" onclick={fn _ => sheetModel.Previous}/>
+					  <a class="glyphicon glyphicon_chevron_left" style="cursor: pointer; text-decoration: none" onclick={fn _ => sheetModel.Previous}/>
 					    Date
-					    <a class="glyphicon glyphicon_chevron_right" onclick={fn _ => sheetModel.Next}/>
+					    <a class="glyphicon glyphicon_chevron_right" style="cursor: pointer; text-decoration: none" onclick={fn _ => sheetModel.Next}/>
 					      <span class="pull_right">
 						{if count > 1
-						 then <xml><a class="glyphicon glyphicon_minus_sign" onclick={fn _ => sheetModel.Minus}/></xml>
+						 then <xml><a class="glyphicon glyphicon_minus_sign" style="cursor: pointer; text-decoration: none" onclick={fn _ => sheetModel.Minus}/></xml>
 						 else <xml></xml>}
 						  
-						  <a class="glyphicon glyphicon_plus_sign" onclick={fn _ => sheetModel.Plus}/>
+						  <a class="glyphicon glyphicon_plus_sign" style="cursor: pointer; text-decoration: none" onclick={fn _ => sheetModel.Plus}/>
 					      </span>
 					</th>
 				      </tr>
@@ -380,6 +380,32 @@ functor MakeView (A : MAKE_VIEW_ARGUMENTS) : VIEW = struct
 						       </xml>) datesAndGroups.Dates}
 				      </tr>
 				    </thead>
+				    <tbody>
+				      {List.mapX (fn group =>
+						     <xml>
+						       {List.mapXi (fn index row =>
+								       <xml>
+									 <tr>
+									   {if index = 0 then
+										<xml>
+										  <th class="text-center" style="vertical-align: middle" rowspan={List.length group.Rows}>
+										    {groupHeaderView group.Content}
+										  </th>
+										</xml>
+									    else <xml></xml>}
+									   <th class="text-center" style="vertical-align: middle">
+									     {rowHeaderView row.Content}
+									   </th>
+									   {List.mapX (fn cell =>
+											  <xml>
+											    <td style="vertical-align: middle">
+											      {cellView cell.Id cell.Content}
+											    </td>
+											  </xml>) row.Cells}
+									 </tr>
+								       </xml>) group.Rows}
+						     </xml>) datesAndGroups.Groups}
+				    </tbody>
 				  </table>
 				</xml>
 			    end)
@@ -433,8 +459,11 @@ structure View = MakeView (struct
 								    return content.Nm
 							    end)
 						 
-			       fun cellView (content : source string) : xbody = <xml>
-				 <ctextbox source={content}/>
+			       fun cellView (id : Model.cellModelId) (content : source string) : xbody = <xml>
+				 <ctextbox source={content} onkeyup={fn event => if event.KeyCode = 13 then
+										     Model.saveCellModel id content
+										 else
+										     return ()}/>
 			       </xml>
 										
 			       fun rowHeaderView (content : string) : xbody = <xml>
@@ -453,7 +482,8 @@ fun application () : transaction page =
     return <xml>
       <head>		  
 	<link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"/>
-	<link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"/>		
+	<link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"/>
+	<link rel="stylesheet" type="text/css" href="/TimeSheet/timeSheet.css"/>
       </head>
       <body style="padding-top: 50px" onload={start <- now;
 					      sheetModel.Load start 7}>

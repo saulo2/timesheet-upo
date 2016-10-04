@@ -1,0 +1,7 @@
+input[type=text] {
+    border: none;
+
+    text-align: center;
+    
+    width: 100%
+}
