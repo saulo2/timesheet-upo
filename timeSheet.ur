@@ -203,14 +203,15 @@ signature MODEL = sig
     type groupModel  = {Content : groupModelContent,
 			Rows : list rowModel}
 
-    type sheetModel  = {DatesAndGroupsSource : source {Dates : list time,
-						       Groups : list groupModel},
+    type sheetModel  = {DatesAndGroupsOptionSource : source (option {Dates : list time,
+								     Groups : list groupModel}),
+			Load : time -> int -> transaction unit,
 			Previous : transaction unit,
 			Next : transaction unit,
 			Minus : transaction unit,
 			Plus : transaction unit}
 
-    val loadSheetModel : time -> int -> transaction sheetModel
+    val makeSheetModel : transaction sheetModel
 
     val saveCellModel : cellModelId -> cellModelContent -> transaction unit
 end
@@ -245,15 +246,16 @@ functor MakeModel (A : MAKE_MODEL_ARGUMENTS) : MODEL where type cellModelContent
     type groupModel = {Content : groupModelContent,
 		       Rows : list rowModel}
 
-    type sheetModel = {DatesAndGroupsSource : source {Dates : list time,
-						      Groups : list groupModel},
+    type sheetModel = {DatesAndGroupsOptionSource : source (option {Dates : list time,
+								    Groups : list groupModel}),
+		       Load : time -> int -> transaction unit,
 		       Previous : transaction unit,
 		       Next : transaction unit,
 		       Minus : transaction unit,
 		       Plus : transaction unit}
 
-    fun loadSheetModel (start : time) (count : int) : transaction sheetModel =
-	datesAndGroupsSource <- source {Dates = [], Groups = []};
+    val makeSheetModel =
+	datesAndGroupsOptionSource <- source None;
 
 	let fun load (start : time) (count : int) : transaction unit =
 		sheet <- rpc (Service.loadSheet start count);
@@ -267,46 +269,53 @@ functor MakeModel (A : MAKE_MODEL_ARGUMENTS) : MODEL where type cellModelContent
 											     Content = content}) row.Cells;
 							      return {Content = content, Cells = cells}) group.Rows;
 					return {Content = content, Rows = rows}) sheet.Groups;
-		set datesAndGroupsSource {Dates = sheet.Dates, Groups = groups}
+		set datesAndGroupsOptionSource (Some {Dates = sheet.Dates, Groups = groups})
 
 	    val previous =		
-		datesAndGroups <- get datesAndGroupsSource;
-		case datesAndGroups.Dates of
-		    start :: _ => let val count = List.length datesAndGroups.Dates
-				      val start = sum start (0 - count)
-				  in
-				      load start count
-				  end
-		  | [] => return ()
+		datesAndGroupsOption <- get datesAndGroupsOptionSource;
+		case datesAndGroupsOption of
+		    None => return ()
+		  | Some datesAndGroups => case datesAndGroups.Dates of
+					       start :: _ => let val count = List.length datesAndGroups.Dates
+								 val start = sum start (0 - count)
+							     in
+								 load start count
+							     end
+					     | [] => return ()
+	    val next = 
+		datesAndGroupsOption <- get datesAndGroupsOptionSource;
+		case datesAndGroupsOption of
+		    None => return ()
+		  | Some datesAndGroups => case datesAndGroups.Dates of
+					       start :: _ => let val count = List.length datesAndGroups.Dates
+								 val start = sum start count
+							     in
+								 load start count
+							     end
+					     | [] => return ()
 
-	    val next =
-		datesAndGroups <- get datesAndGroupsSource;
-		case datesAndGroups.Dates of
-		    start :: _ => let val count = List.length datesAndGroups.Dates
-				      val start = sum start count
-				  in
-				      load start count
-				  end
-		  | [] => return ()				  			  
-			  
 	    val minus =
-		datesAndGroups <- get datesAndGroupsSource;
-		case datesAndGroups.Dates of
-		    start :: _ :: _ => let val count = List.length datesAndGroups.Dates in
-					   load start (count - 1)
-				       end
-		  | _ => return ()
+		datesAndGroupsOption <- get datesAndGroupsOptionSource;
+		case datesAndGroupsOption of
+		    None => return ()
+		  | Some datesAndGroups => case datesAndGroups.Dates of
+					       start :: _ :: _ => let val count = List.length datesAndGroups.Dates in
+								      load start (count - 1)
+								  end
+					     | _ => return ()
 
 	    val plus =
-		datesAndGroups <- get datesAndGroupsSource;
-		case datesAndGroups.Dates of
-		    start :: _ :: _ => let val count = List.length datesAndGroups.Dates in
-					   load start (count + 1)
-				       end
-		  | _ => return ()
-		
+		datesAndGroupsOption <- get datesAndGroupsOptionSource;
+		case datesAndGroupsOption of
+		    None => return ()
+		  | Some datesAndGroups => case datesAndGroups.Dates of
+					       start :: _  => let val count = List.length datesAndGroups.Dates in
+								  load start (count + 1)
+							      end
+					     | _ => return ()
 	in
-	    return {DatesAndGroupsSource  = datesAndGroupsSource,
+	    return {DatesAndGroupsOptionSource = datesAndGroupsOptionSource,
+		    Load = load,
 		    Previous = previous,
 		    Next  = next,
 		    Minus = minus,
@@ -340,37 +349,40 @@ functor MakeView (A : MAKE_VIEW_ARGUMENTS) : VIEW = struct
     open Bootstrap3
 
     fun sheetView (sheetModel : Model.sheetModel) : xbody =
-	let val s = datesAndGroups <- signal sheetModel.DatesAndGroupsSource;
-		let val count = List.length datesAndGroups.Dates in
-		    return <xml>
-		      <table class="bs3_table table_bordered table_condensed table_responsive table_striped">
-			<thead>
-			  <tr>
-			    <th rowspan=2>Project</th>
-			    <th rowspan=2>Task</th>
-			    <th colspan={count}>
-			      <a class="glyphicon glyphicon_chevron_left" onclick={fn _ => sheetModel.Previous}/>
-			      Date
-			      <a class="glyphicon glyphicon_chevron_right" onclick={fn _ => sheetModel.Next}/>
-			      <span class="pull_right">
-				{if count > 1
-				 then <xml><a class="glyphicon glyphicon_minus_sign" onclick={fn _ => sheetModel.Minus}/></xml>
-				 else <xml></xml>}
-				
-				<a class="glyphicon glyphicon_plus_sign" onclick={fn _ => sheetModel.Plus}/>
-			      </span>
-			    </th>
-			  </tr>
-			  <tr>
-			    {List.mapX (fn date =>
-					   <xml>
-					     <th>{[timef "%D" date]}</th>
-					   </xml>) datesAndGroups.Dates}
-			  </tr>
-			</thead>
-		      </table>
-		    </xml>
-		end
+	let val s = datesAndGroupsOption <- signal sheetModel.DatesAndGroupsOptionSource;
+		return (case datesAndGroupsOption of
+			    None => <xml></xml>
+			  | Some datesAndGroups =>
+			    let val count = List.length datesAndGroups.Dates in
+				<xml>
+				  <table class="bs3_table table_bordered table_condensed table_responsive table_striped">
+				    <thead>
+				      <tr>
+					<th class="text-center" style="vertical-align: middle" rowspan=2>Project</th>
+					<th class="text-center" style="vertical-align: middle" rowspan=2>Task</th>
+					<th class="text-center" colspan={count}>
+					  <a class="glyphicon glyphicon_chevron_left" onclick={fn _ => sheetModel.Previous}/>
+					    Date
+					    <a class="glyphicon glyphicon_chevron_right" onclick={fn _ => sheetModel.Next}/>
+					      <span class="pull_right">
+						{if count > 1
+						 then <xml><a class="glyphicon glyphicon_minus_sign" onclick={fn _ => sheetModel.Minus}/></xml>
+						 else <xml></xml>}
+						  
+						  <a class="glyphicon glyphicon_plus_sign" onclick={fn _ => sheetModel.Plus}/>
+					      </span>
+					</th>
+				      </tr>
+				      <tr>
+					{List.mapX (fn date =>
+						       <xml>
+							 <th class="text-center">{[timef "%D" date]}</th>
+						       </xml>) datesAndGroups.Dates}
+				      </tr>
+				    </thead>
+				  </table>
+				</xml>
+			    end)
 	in
 	    <xml>
 	      <dyn signal={s}/>
@@ -434,11 +446,23 @@ structure View = MakeView (struct
 			       </xml>
 			   end)
 
+open Bootstrap3
+
 fun application () : transaction page =
-    start <- now;
-    sheetModel <- View.Model.loadSheetModel start 7;
+    sheetModel <- View.Model.makeSheetModel;
     return <xml>
-	<body>
-	  {View.sheetView sheetModel}
-	</body>
+      <head>		  
+	<link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"/>
+	<link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"/>		
+      </head>
+      <body style="padding-top: 50px" onload={start <- now;
+					      sheetModel.Load start 7}>
+	<div class="container">
+	  <div class="row">
+	    <div class="col-sm-12">
+	      {View.sheetView sheetModel}
+	    </div>
+	  </div>
+	</div>
+      </body>
     </xml>
