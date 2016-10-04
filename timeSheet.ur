@@ -17,12 +17,13 @@ fun timeRange (start: time) (count: int): list time =
 
 
 signature SERVICE = sig
+    type cellId
     type cellContent
     type rowContent	 
     type groupContent
 
-    type cell = {ContentOption : option cellContent,
-		 Save : option cellContent -> transaction unit}
+    type cell = {Id : cellId,
+		 ContentOption : option cellContent}
 		
     type row = {Content : rowContent,
 		Cells : list cell}
@@ -31,9 +32,11 @@ signature SERVICE = sig
 		  Rows : list row}
 		 
     type sheet = {Dates : list time,
-		  Groups : list group}
+		  Groups : list group}		 
 
     val loadSheet : time -> int -> transaction sheet
+
+    val saveCell : cellId -> option cellContent -> transaction unit
 end
 
 signature MAKE_SERVICE_ARGUMENTS = sig
@@ -100,8 +103,10 @@ functor MakeService (A : MAKE_SERVICE_ARGUMENTS) : SERVICE where type cellConten
     type rowContent = $(rowTableOtherColumns)		      
     type groupContent = $(groupTableOtherColumns)
 
-    type cell = {ContentOption : option cellContent,
-		 Save : option cellContent -> transaction unit}
+    type cellId = {GroupId : groupTablePrimaryKeyColumnType, RowId : rowTablePrimaryKeyColumnType, Date : time}
+
+    type cell = {Id : cellId,
+		 ContentOption : option cellContent}
 		
     type row = {Content : rowContent,
 		Cells : list cell}
@@ -112,17 +117,6 @@ functor MakeService (A : MAKE_SERVICE_ARGUMENTS) : SERVICE where type cellConten
     type sheet = {Dates : list time,
 		  Groups : list group}
 
-    fun save (groupId : groupTablePrimaryKeyColumnType)
-	     (rowId : rowTablePrimaryKeyColumnType)
-	     (date : time)
-	     (content : option cellContent) : transaction unit =
-	case content of
-	    None => return ()
-	  | Some content => @Sql.easy_insertOrUpdate
-			     [[cellTableGroupForeignKeyColumnName = _, cellTableRowForeignKeyColumnName = _, cellTableDateColumnName = _]]
-			     ! _ cellTableOtherColumnsInjectable _ cellTableOtherColumnsFolder cellTable
-			     ({cellTableGroupForeignKeyColumnName = groupId, cellTableRowForeignKeyColumnName = rowId, cellTableDateColumnName = date} ++ content)
-	
     fun loadSheet (start : time) (count : int) : transaction sheet =
 	let val startTime = midnight start
 	    val endTime = sum startTime count
@@ -150,13 +144,15 @@ functor MakeService (A : MAKE_SERVICE_ARGUMENTS) : SERVICE where type cellConten
 					INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
 					INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName})
 				     (fn r groupIdRowPairs =>
-					 let val cells = List.mp (fn date => {ContentOption = case List.find (fn cell => cell.GroupId = r.GroupId &&
+					 let val cells = List.mp (fn date => {Id = {GroupId = r.GroupId,
+										    RowId = r.RowId,
+										    Date = date},
+									      ContentOption = case List.find (fn cell => cell.GroupId = r.GroupId &&
 															 cell.RowId = r.RowId &&
 															 cell.Date = date)
 													     cells of
 												  None => None
-												| Some cell => Some cell.C,
-									      Save = save r.GroupId r.RowId date})
+												| Some cell => Some cell.C})
 								 dates
 					     val row = {Content = r.R, Cells = cells}
 					     val groupIdRowPair = (r.GroupId, row)
@@ -180,17 +176,26 @@ functor MakeService (A : MAKE_SERVICE_ARGUMENTS) : SERVICE where type cellConten
 
 	    return {Dates = dates, Groups = groups}
 	end
+
+    fun saveCell (id : cellId) (content : option cellContent) : transaction unit = 
+	case content of
+	    None => return ()
+	  | Some content => @Sql.easy_insertOrUpdate
+			     [[cellTableGroupForeignKeyColumnName = _, cellTableRowForeignKeyColumnName = _, cellTableDateColumnName = _]]
+			     ! _ cellTableOtherColumnsInjectable _ cellTableOtherColumnsFolder cellTable
+			     ({cellTableGroupForeignKeyColumnName = id.GroupId, cellTableRowForeignKeyColumnName = id.RowId, cellTableDateColumnName = id.Date} ++ content)	
 end
 
 
 
 signature MODEL = sig
+    type cellModelId
     type cellModelContent
     type rowModelContent
     type groupModelContent
 
-    type cellModel = {Content : cellModelContent,
-		      Save : cellModelContent -> transaction unit}
+    type cellModel = {Id : cellModelId,
+		      Content : cellModelContent}
 
     type rowModel  = {Content : rowModelContent,
 		      Cells : list cellModel}
@@ -206,6 +211,8 @@ signature MODEL = sig
 			Plus : transaction unit}
 
     val loadSheetModel : time -> int -> transaction sheetModel
+
+    val saveCellModel : cellModelId -> cellModelContent -> transaction unit
 end
 
 signature MAKE_MODEL_ARGUMENTS = sig
@@ -226,10 +233,11 @@ functor MakeModel (A : MAKE_MODEL_ARGUMENTS) : MODEL where type cellModelContent
                                                      where type rowModelContent = A.rowModelContent
                                                      where type groupModelContent = A.groupModelContent = struct
     open A
-									       
-    type cellModel = {Content : cellModelContent,
-		      Save : cellModelContent -> transaction unit}
 
+    type cellModelId = Service.cellId
+	 
+    type cellModel = {Id : cellModelId,
+		      Content : cellModelContent}
 		
     type rowModel = {Content : rowModelContent,
 		     Cells : list cellModel}
@@ -253,14 +261,10 @@ functor MakeModel (A : MAKE_MODEL_ARGUMENTS) : MODEL where type cellModelContent
 					content <- convertGroupContent group.Content;
 					rows <- List.mapM (fn row =>
 							      content <- convertRowContent row.Content;
-							      cells <- List.mapM (fn (cell : Service.cell) =>
+							      cells <- List.mapM (fn cell =>
 										     content <- convertCellContent cell.ContentOption;
-										     let fun save (content : cellModelContent) : transaction unit =
-											     contentOption <- convertCellModelContent content;
-											     rpc (cell.Save contentOption)
-										     in
-											 return {Content = content, Save = save}
-										     end) row.Cells;
+										     return {Id = cell.Id,
+											     Content = content}) row.Cells;
 							      return {Content = content, Cells = cells}) group.Rows;
 					return {Content = content, Rows = rows}) sheet.Groups;
 		set datesAndGroupsSource {Dates = sheet.Dates, Groups = groups}
@@ -308,6 +312,10 @@ functor MakeModel (A : MAKE_MODEL_ARGUMENTS) : MODEL where type cellModelContent
 		    Minus = minus,
 		    Plus = plus}
 	end
+
+    fun saveCellModel (id : cellModelId) (content : cellModelContent) : transaction unit =
+	contentOption <- convertCellModelContent content;
+	rpc (Service.saveCell id contentOption)
 end
 
 
