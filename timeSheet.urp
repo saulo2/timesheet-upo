@@ -1,8 +1,10 @@
 database postgresql://timesheet:timesheet@localhost:5432/timesheet
 sql create.sql
+safeGet TimeSheet/application
 
 $/datetime
 $/list
+$/string
 $/upo/sql
 
 timeSheet

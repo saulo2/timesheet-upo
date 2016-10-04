@@ -16,7 +16,27 @@ fun timeRange (start: time) (count: int): list time =
 
 
 
-signature SERVICE_ARGUMENTS = sig
+signature SERVICE = sig
+    type cellContent
+    type rowContent	 
+    type groupContent
+
+    type cell = {ContentOption : option cellContent,
+		 Save : option cellContent -> transaction unit}
+		
+    type row = {Content : rowContent,
+		Cells : list cell}
+	       
+    type group = {Content : groupContent,
+		  Rows : list row}
+		 
+    type sheet = {Dates : list time,
+		  Groups : list group}
+
+    val loadSheet : time -> int -> transaction sheet
+end
+
+signature MAKE_SERVICE_ARGUMENTS = sig
     con groupTablePrimaryKeyColumnName :: Name
     con groupTablePrimaryKeyColumnType :: Type
     val groupTablePrimaryKeyColumnTypeEq : eq groupTablePrimaryKeyColumnType
@@ -71,36 +91,16 @@ signature SERVICE_ARGUMENTS = sig
 					cellTableDateColumnName]] ++ cellTableOtherConstraints)
 end
 
-signature SERVICE = sig
-    type cellContent
-    type rowContent	 
-    type groupContent
-
-    type cell = {Content : option cellContent,
-		 Save : option cellContent -> transaction unit}
-		
-    type row = {Content : rowContent,
-		Cells : list cell}
-	       
-    type group = {Content : groupContent,
-		  Rows : list row}
-		 
-    type sheet = {Dates : list time,
-		  Groups : list group}
-
-    val loadSheet : time -> int -> transaction sheet
-end
-
-functor Service (A : SERVICE_ARGUMENTS) : SERVICE where type cellContent = $(A.cellTableOtherColumns)
-                                                  where type rowContent = $(A.rowTableOtherColumns)
-                                                  where type groupContent = $(A.groupTableOtherColumns) = struct
+functor MakeService (A : MAKE_SERVICE_ARGUMENTS) : SERVICE where type cellContent = $(A.cellTableOtherColumns)
+                                                           where type rowContent = $(A.rowTableOtherColumns)
+                                                           where type groupContent = $(A.groupTableOtherColumns) = struct
     open A
 										     
     type cellContent = $(cellTableOtherColumns)
     type rowContent = $(rowTableOtherColumns)		      
     type groupContent = $(groupTableOtherColumns)
 
-    type cell = {Content : option cellContent,
+    type cell = {ContentOption : option cellContent,
 		 Save : option cellContent -> transaction unit}
 		
     type row = {Content : rowContent,
@@ -150,12 +150,12 @@ functor Service (A : SERVICE_ARGUMENTS) : SERVICE where type cellContent = $(A.c
 					INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
 					INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName})
 				     (fn r groupIdRowPairs =>
-					 let val cells = List.mp (fn date => {Content = case List.find (fn cell => cell.GroupId = r.GroupId &&
-														   cell.RowId = r.RowId &&
-														   cell.Date = date)
-												       cells of
-											    None => None
-											  | Some cell => Some cell.C,
+					 let val cells = List.mp (fn date => {ContentOption = case List.find (fn cell => cell.GroupId = r.GroupId &&
+															 cell.RowId = r.RowId &&
+															 cell.Date = date)
+													     cells of
+												  None => None
+												| Some cell => Some cell.C,
 									      Save = save r.GroupId r.RowId date})
 								 dates
 					     val row = {Content = r.R, Cells = cells}
@@ -184,27 +184,13 @@ end
 
 
 
-signature MODEL_ARGUMENTS = sig
-    structure Service : SERVICE
-
-    type cellModelContent
-    type rowModelContent
-    type groupModelContent
-
-    val convertCellContent : option Service.cellContent -> transaction cellModelContent
-    val convertRowContent : Service.rowContent -> transaction rowModelContent
-    val convertGroupContent : Service.groupContent -> transaction groupModelContent
-
-    val convertCellModelContent : cellModelContent -> transaction (option Service.cellContent)
-end
-
 signature MODEL = sig
     type cellModelContent
     type rowModelContent
     type groupModelContent
 
     type cellModel = {Content : cellModelContent,
-		      Save : transaction unit}
+		      Save : cellModelContent -> transaction unit}
 
     type rowModel  = {Content : rowModelContent,
 		      Cells : list cellModel}
@@ -222,13 +208,27 @@ signature MODEL = sig
     val loadSheetModel : time -> int -> transaction sheetModel
 end
 
-functor Model (A : MODEL_ARGUMENTS) : MODEL where type cellModelContent = A.cellModelContent
-                                            where type rowModelContent = A.rowModelContent
-                                            where type groupModelContent = A.groupModelContent = struct
+signature MAKE_MODEL_ARGUMENTS = sig
+    structure Service : SERVICE
+
+    type cellModelContent
+    type rowModelContent
+    type groupModelContent
+
+    val convertCellContent : option Service.cellContent -> transaction cellModelContent
+    val convertRowContent : Service.rowContent -> transaction rowModelContent
+    val convertGroupContent : Service.groupContent -> transaction groupModelContent
+
+    val convertCellModelContent : cellModelContent -> transaction (option Service.cellContent)
+end
+		  
+functor MakeModel (A : MAKE_MODEL_ARGUMENTS) : MODEL where type cellModelContent = A.cellModelContent
+                                                     where type rowModelContent = A.rowModelContent
+                                                     where type groupModelContent = A.groupModelContent = struct
     open A
 									       
     type cellModel = {Content : cellModelContent,
-		      Save : transaction unit}
+		      Save : cellModelContent -> transaction unit}
 
 		
     type rowModel = {Content : rowModelContent,
@@ -254,9 +254,10 @@ functor Model (A : MODEL_ARGUMENTS) : MODEL where type cellModelContent = A.cell
 					rows <- List.mapM (fn row =>
 							      content <- convertRowContent row.Content;
 							      cells <- List.mapM (fn cell =>
-										     content <- convertCellContent cell.Content;
-										     let val save =
-											     return ()
+										     content <- convertCellContent cell.ContentOption;
+										     let fun save (content : cellModelContent) : transaction unit =
+											     contentOption <- convertCellModelContent content;
+											     cell.Save contentOption
 										     in
 											 return {Content = content, Save = save}
 										     end) row.Cells;
@@ -311,34 +312,28 @@ end
 
 
 
-(*
-signature VIEW_HELPER = sig
-    type cellContent
-    type rowContent
-    type groupContent
-
-    val cell : source (option cellContent) -> xbody
-    val rowHeader : rowContent -> xbody
-    val groupHeader : groupContent -> xbody
-end
-							      
-signature MODEL_AND_VIEW_HELPER = sig
+signature VIEW = sig
     structure Model : MODEL
-    structure ViewHelper : VIEW_HELPER where type cellContent = Model.cellContent
-                                       where type rowContent = Model.rowContent
-                                       where type groupContent = Model.groupContent
+										      
+    val sheetView : Model.sheetModel -> xbody
 end
 
-signature VIEW = sig    
-    val render : unit -> transaction xbody
-end
+signature MAKE_VIEW_ARGUMENTS = sig
+    structure Model : MODEL
 
-functor View (M : MODEL_AND_VIEW_HELPER) : VIEW = struct
-    fun render () : transaction xbody = return <xml>
-      <div>
-      </div>
+    val cellView : Model.cellModelContent -> xbody
+    val rowHeaderView : Model.rowModelContent -> xbody
+    val groupHeaderView : Model.groupModelContent -> xbody
+end
+		 
+functor MakeView (A : MAKE_VIEW_ARGUMENTS) : VIEW = struct
+    open A
+	 
+    fun sheetView (sheetModel : Model.sheetModel) : xbody = <xml>
     </xml>
 end
+
+
 
 table projectTable : {Id : int, Nm : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
@@ -354,24 +349,53 @@ table entryTable : {ProjectId : int, TaskId : int, Date : time, Time : float} PR
       CONSTRAINT PROJECT_ID_IS_FOREIGN_KEY FOREIGN KEY ProjectId REFERENCES projectTable (Id),
       CONSTRAINT TASK_ID_IS_FOREIGN_KEY FOREIGN KEY TaskId REFERENCES taskTable (Id)
 
-structure View = View (struct
-			   structure Model = Model (Service (struct
-								 val groupTable = projectTable
-								 val rowTable = taskTable
-								 val groupRowTable = projectTaskTable
-								 val cellTable = entryTable
-							     end))
-			   structure ViewHelper = struct
-			       fun cell (contentOptionSource : source (option {Time : float})) : xbody = <xml>
+      
+      
+structure View = MakeView (struct
+			       structure Model = MakeModel (struct
+								structure Service = MakeService (struct
+												     val groupTable = projectTable
+												     val rowTable = taskTable
+												     val groupRowTable = projectTaskTable
+												     val cellTable = entryTable
+												 end)
+										    
+								fun convertCellContent (contentOption : option {Time : float}) : transaction (source string) =
+								    source (case contentOption of
+										Some content => show content.Time
+									      | None => "")
+								    
+								fun convertCellModelContent (contentSource : source string) : transaction (option {Time : float}) =
+								    content <- get contentSource;
+								    return (if content = ""
+									    then None
+									    else Some {Time = readError content})
+								    
+								fun convertRowContent (content : {Nm : string}) : transaction string =
+								    return content.Nm
+								    
+								fun convertGroupContent (content : {Nm : string}) : transaction string =
+								    return content.Nm
+							    end)
+						 
+			       fun cellView (content : source string) : xbody = <xml>
+				 <ctextbox source={content}/>
 			       </xml>
+										
+			       fun rowHeaderView (content : string) : xbody = <xml>
+				 {[content]}
+			       </xml>
+									      
+			       fun groupHeaderView (content : string) : xbody = <xml>
+				 {[content]}
+			       </xml>
+			   end)
 
-			       fun rowHeader (content : {Nm : string}) : xbody = <xml>
-				 {[content.Nm]}
-			       </xml>
-
-			       fun groupHeader (content : {Nm : string}) : xbody = <xml>
-				 {[content.Nm]}
-			       </xml>
-			   end
-		       end)
-*)
+fun application () : transaction page =
+    start <- now;
+    sheetModel <- View.Model.loadSheetModel start 7;
+    return <xml>
+	<body>
+	  {View.sheetView sheetModel}
+	</body>
+    </xml>

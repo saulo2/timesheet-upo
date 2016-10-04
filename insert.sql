@@ -1,11 +1,8 @@
-delete from UW_SERVICE_PROJECTTASK;
-delete from UW_SERVICE_TASKTABLE;
-delete from UW_SERVICE_PROJECT;
-delete from UW_SERVICE_USER;
+delete from uw_TimeSheet_projectTaskTable;
+delete from uw_TimeSheet_taskTable;
+delete from uw_TimeSheet_projectTable;
 
-insert into UW_SERVICE_USER (UW_ID, UW_NAME) values (1, 'Saulo Araujo');
-
-insert into UW_SERVICE_PROJECT (UW_ID, UW_NAME, UW_DESCRIPTION, UW_VISIBLE, UW_USER_ID) values (1, 'Project 01', 'Project 01', true, 1);
+insert into UW_SERVICE_PROJECT (uw_id, uw_name, UW_DESCRIPTION, UW_VISIBLE, UW_USER_ID) values (1, 'Project 01', 'Project 01', true, 1);
 insert into UW_SERVICE_PROJECT (UW_ID, UW_NAME, UW_DESCRIPTION, UW_VISIBLE, UW_USER_ID) values (2, 'Project 02', 'Project 02', true, 1);
 insert into UW_SERVICE_PROJECT (UW_ID, UW_NAME, UW_DESCRIPTION, UW_VISIBLE, UW_USER_ID) values (3, 'Project 03', 'Project 03', true, 1);
 insert into UW_SERVICE_PROJECT (UW_ID, UW_NAME, UW_DESCRIPTION, UW_VISIBLE, UW_USER_ID) values (4, 'Project 04', 'Project 04', true, 1);
