@@ -1,0 +1,11 @@
+database postgresql://timesheet:timesheet@localhost:5432/timesheet
+file /Sample/sample.css sample.css
+file /Sample/sample.js sample.js
+lessSafeFfi
+library ../timeSheet
+safeGet Sample/application
+script sample.js
+sql create.sql
+
+sample
+

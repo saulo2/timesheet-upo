@@ -1,11 +1,4 @@
-database postgresql://timesheet:timesheet@localhost:5432/timesheet
-file /TimeSheet/timeSheet.css timeSheet.css
-file /TimeSheet/timeSheet.js timeSheet.js
-lessSafeFfi
 library $/upo/default
-safeGet TimeSheet/application
-script timeSheet.js
-sql create.sql
 
 $/datetime
 $/list
