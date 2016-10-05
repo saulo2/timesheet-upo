@@ -120,7 +120,7 @@ functor MakeService (A : MAKE_SERVICE_ARGUMENTS) : SERVICE where type cellConten
     fun loadSheet (start : time) (count : int) : transaction sheet =
 	let val startTime = midnight start
 	    val endTime = sum startTime count
-	    val dates = timeRange start (count - 1)
+	    val dates = timeRange startTime (count - 1)
 	in
 	    cells <- queryL (SELECT
 			       G.{groupTablePrimaryKeyColumnName} AS GroupId,
@@ -430,7 +430,7 @@ table entryTable : {ProjectId : int, TaskId : int, Date : time, Time : float} PR
       CONSTRAINT PROJECT_ID_IS_FOREIGN_KEY FOREIGN KEY ProjectId REFERENCES projectTable (Id),
       CONSTRAINT TASK_ID_IS_FOREIGN_KEY FOREIGN KEY TaskId REFERENCES taskTable (Id)
 
-      
+ffi blur: id -> transaction unit
       
 structure View = MakeView (struct
 			       structure Model = MakeModel (struct
@@ -440,14 +440,17 @@ structure View = MakeView (struct
 												     val groupRowTable = projectTaskTable
 												     val cellTable = entryTable
 												 end)
-										    
-								fun convertCellContent (contentOption : option {Time : float}) : transaction (source string) =
-								    source (case contentOption of
-										Some content => show content.Time
-									      | None => "")
-								    
-								fun convertCellModelContent (contentSource : source string) : transaction (option {Time : float}) =
-								    content <- get contentSource;
+
+								fun convertCellContent (contentOption : option {Time : float}) : transaction ({Id : id, ValueSource : source string}) =
+								    id <- fresh;
+								    valueSource <- source (case contentOption of
+											       Some content => show content.Time
+											     | None => "");
+								    return {Id = id,
+									    ValueSource = valueSource}
+
+								fun convertCellModelContent (content : {Id : id, ValueSource : source string}) : transaction (option {Time : float}) =
+								    content <- get content.ValueSource;
 								    return (if content = ""
 									    then None
 									    else Some {Time = readError content})
@@ -458,12 +461,13 @@ structure View = MakeView (struct
 								fun convertGroupContent (content : {Nm : string, Ds : string}) : transaction string =
 								    return content.Nm
 							    end)
-						 
-			       fun cellView (id : Model.cellModelId) (content : source string) : xbody = <xml>
-				 <ctextbox source={content} onkeyup={fn event => if event.KeyCode = 13 then
-										     Model.saveCellModel id content
-										 else
-										     return ()}/>
+
+			       fun cellView (id : Model.cellModelId) (content : {Id : id, ValueSource : source string}) : xbody = <xml>
+				 <ctextbox source={content.ValueSource} onkeyup={fn event => if event.KeyCode = 13 then
+												 _ <- Model.saveCellModel id content;
+												 blur content.Id
+											     else
+												 return ()}/>
 			       </xml>
 										
 			       fun rowHeaderView (content : string) : xbody = <xml>
@@ -482,7 +486,6 @@ fun application () : transaction page =
     return <xml>
       <head>		  
 	<link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"/>
-	<link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"/>
 	<link rel="stylesheet" type="text/css" href="/TimeSheet/timeSheet.css"/>
       </head>
       <body style="padding-top: 50px" onload={start <- now;
