@@ -416,6 +416,25 @@ functor MakeView (A : MAKE_VIEW_ARGUMENTS) : VIEW = struct
 	end
 end
 
+functor MakeS0(A : VIEW) : Ui.S0 = struct
+    open A
+
+    type a = Model.sheetModel
+
+    val create = Model.makeSheetModel
+
+    fun onload (sheet : Model.sheetModel) : transaction unit =
+	start <- now;
+	sheet.Load start 7
+
+    fun render (_ : Ui.context) (sheet : Model.sheetModel) : xbody =
+	sheetView sheet
+
+    val ui = {Create = create,
+	      Onload = onload,
+	      Render = render}
+end
+
 table projectTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
 
@@ -432,7 +451,7 @@ table entryTable : {ProjectId : int, TaskId : int, Date : time, Time : float} PR
 
 ffi blur: id -> transaction unit
       
-structure View = MakeView (struct
+structure  = MakeView (struct
 			       structure Model = MakeModel (struct
 								structure Service = MakeService (struct
 												     val groupTable = projectTable
@@ -479,6 +498,14 @@ structure View = MakeView (struct
 			       </xml>
 			   end)
 
+structure M = Ui.Make(struct
+			  val css = {}
+			  val icon = None
+		      end)
+	      
+val application = M.simple "TimeSheet"
+		  
+(*
 open Bootstrap3
 
 fun application () : transaction page =
@@ -499,3 +526,4 @@ fun application () : transaction page =
 	</div>
       </body>
     </xml>
+*)

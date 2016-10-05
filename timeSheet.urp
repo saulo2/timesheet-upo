@@ -1,18 +1,14 @@
-allow url https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css
 database postgresql://timesheet:timesheet@localhost:5432/timesheet
 file /TimeSheet/timeSheet.css timeSheet.css
 file /TimeSheet/timeSheet.js timeSheet.js
 lessSafeFfi
-rewrite style Bootstrap3/bs3_*
-rewrite style Bootstrap3/* [-]
+library $/upo/default
 safeGet TimeSheet/application
 script timeSheet.js
 sql create.sql
 
-$/bootstrap/bootstrap3
 $/datetime
 $/list
 $/string
-$/upo/sql
 
 timeSheet
