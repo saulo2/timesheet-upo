@@ -5,6 +5,13 @@ A component for the [The Ur/Web People Organizer](https://github.com/achlipala/u
 Follow the sections below to see how to create a time sheet application with TimeSheet-UPO.
 
 ## Service
+The easiest way to create the service layer TimeSheet-UPO requires is through the `TimeSheet.MakeService` functor, which receives four tables as arguments:
+
+* `groupTable` is the table whose records group the rows of the time sheet;
+* `rowTable` is the table whose records fill the rows of the time sheet;
+* `groupRowTable` is the table that relates `groupTable` and `rowTable` records in a many to many fashion;
+* `cellTable` is the table whose records fill the cells of the time sheet. `cellTable` also relates `groupTable` and `rowTable` records in a many to many fashion, but this time with (at least) a `time` attribute.
+
 ```UrWeb
 table projectTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
