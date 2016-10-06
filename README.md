@@ -1,9 +1,9 @@
 # timesheet-upo
 This is a component for the [The Ur/Web People Organizer](https://github.com/achlipala/upo) that provides a customizable time sheet.
 
-# Tutorial
+## Tutorial
 
-## Schema
+### Schema
 ```UrWeb
 table projectTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
@@ -20,7 +20,7 @@ table entryTable : {ProjectId : int, TaskId : int, Date : time, Time : float} PR
       CONSTRAINT TASK_ID_IS_FOREIGN_KEY FOREIGN KEY TaskId REFERENCES taskTable (Id)
 ```
 
-## Service
+### Service
 ```UrWeb
 structure Service = TimeSheet.MakeService (struct
 					       val groupTable = projectTable
@@ -30,7 +30,7 @@ structure Service = TimeSheet.MakeService (struct
 					   end)
 ```
 
-## Model
+### Model
 ```UrWeb
 structure Model = TimeSheet.MakeModel (struct
 					   structure Service = Service
@@ -56,7 +56,7 @@ structure Model = TimeSheet.MakeModel (struct
 				       end)
 ```
 
-## View
+### View
 ```UrWeb
 ffi blur: id -> transaction unit
 
@@ -81,7 +81,7 @@ structure View = TimeSheet.MakeView (struct
 				     end)
 ```
 
-## Application
+### Application
 ```UrWeb
 structure S0 = TimeSheet.MakeS0 (View)
 	       
