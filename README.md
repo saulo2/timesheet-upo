@@ -4,7 +4,8 @@ This is a component for the [The Ur/Web People Organizer](https://github.com/ach
 # Tutorial
 
 ## Schema
-```table projectTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id,
+```UrWeb
+table projectTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
 
 table taskTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id
@@ -20,7 +21,8 @@ table entryTable : {ProjectId : int, TaskId : int, Date : time, Time : float} PR
 ```
 
 ## Service
-```structure Service = TimeSheet.MakeService (struct
+```UrWeb
+structure Service = TimeSheet.MakeService (struct
 					       val groupTable = projectTable
 					       val rowTable = taskTable
 					       val groupRowTable = projectTaskTable
@@ -29,7 +31,8 @@ table entryTable : {ProjectId : int, TaskId : int, Date : time, Time : float} PR
 ```
 
 ## Model
-```structure Model = TimeSheet.MakeModel (struct
+```UrWeb
+structure Model = TimeSheet.MakeModel (struct
 					   structure Service = Service
 							       
 					   fun convertCellContent (contentOption : option {Time : float}) : transaction ({Id : id, ValueSource : source string}) =
@@ -54,7 +57,8 @@ table entryTable : {ProjectId : int, TaskId : int, Date : time, Time : float} PR
 ```
 
 ## View
-```ffi blur: id -> transaction unit
+```UrWeb
+ffi blur: id -> transaction unit
 
 structure View = TimeSheet.MakeView (struct
 					 structure Model = Model
@@ -78,7 +82,8 @@ structure View = TimeSheet.MakeView (struct
 ```
 
 ## Application
-```structure S0 = TimeSheet.MakeS0 (View)
+```UrWeb
+structure S0 = TimeSheet.MakeS0 (View)
 	       
 structure Theme = Ui.Make(struct
 			      val css = {Bootstrap = bless "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css",
