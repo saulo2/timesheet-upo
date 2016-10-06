@@ -1,5 +1,7 @@
 # TimeSheet-UPO
-A component for the [The Ur/Web People Organizer](https://github.com/achlipala/upo) that provides a customizable time sheet.
+A component for the [The Ur/Web People Organizer](https://github.com/achlipala/upo) that provides a customizable time sheet like the one below:
+
+![time sheet application](https://snag.gy/t2Sahd.jpg)
 
 # Tutorial
 Follow the sections below to see how to create a time sheet application with TimeSheet-UPO.
