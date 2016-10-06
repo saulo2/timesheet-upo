@@ -1,9 +1,10 @@
 # TimeSheet-UPO
-This is a component for the [The Ur/Web People Organizer](https://github.com/achlipala/upo) that provides a customizable time sheet.
+A component for the [The Ur/Web People Organizer](https://github.com/achlipala/upo) that provides a customizable time sheet.
 
 # Tutorial
+Follow the sections below to see how to create a time sheet application with TimeSheet-UPO.
 
-## Schema
+## Service
 ```UrWeb
 table projectTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
@@ -18,10 +19,7 @@ table projectTaskTable : {ProjectId : int, TaskId : int} PRIMARY KEY (ProjectId,
 table entryTable : {ProjectId : int, TaskId : int, Date : time, Time : float} PRIMARY KEY (ProjectId, TaskId, Date),
       CONSTRAINT PROJECT_ID_IS_FOREIGN_KEY FOREIGN KEY ProjectId REFERENCES projectTable (Id),
       CONSTRAINT TASK_ID_IS_FOREIGN_KEY FOREIGN KEY TaskId REFERENCES taskTable (Id)
-```
 
-## Service
-```UrWeb
 structure Service = TimeSheet.MakeService (struct
 					       val groupTable = projectTable
 					       val rowTable = taskTable
