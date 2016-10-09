@@ -35,10 +35,10 @@ structure Model = TimeSheet.MakeModel (struct
 						       then None
 						       else Some {Time = readError content})
 					       
-					   fun convertRowContent (content : {Nm : string, Ds : string}) : transaction string =
+					   fun convertRowContent (content : [[Nm] ~ [Ds]] => {Nm : string, Ds : string}) : transaction string =
 					       return content.Nm
 					       
-					   fun convertGroupContent (content : {Nm : string, Ds : string}) : transaction string =
+					   fun convertGroupContent (content : [[Nm] ~ [Ds]] => {Nm : string, Ds : string}) : transaction string =
 					       return content.Nm
 				       end)
 
