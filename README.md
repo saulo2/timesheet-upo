@@ -15,11 +15,16 @@ The easiest way to create the service layer TimeSheet-UPO requires is through th
 * `cellTable` is the table whose records fill the cells of the time sheet. `cellTable` also relates `groupTable` and `rowTable` records in a many to many fashion, but this time with (at least) a `time` attribute.
 
 ```UrWeb
-table projectTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id,
-      CONSTRAINT NM_IS_UNIQUE UNIQUE Nm      
-
-table taskTable : {Id : int, Nm : string, Ds : string} PRIMARY KEY Id
+table userTable : {Id : int, Nm : string} PRIMARY KEY Id,
       CONSTRAINT NM_IS_UNIQUE UNIQUE Nm
+
+table projectTable : {Id : int, Nm : string, Ds : string, UserId : int} PRIMARY KEY Id,
+      CONSTRAINT NM_IS_UNIQUE UNIQUE Nm,
+      CONSTRAINT USER_ID_IS_FOREIGN_KEY FOREIGN KEY UserId REFERENCES userTable (Id)
+
+table taskTable : {Id : int, Nm : string, Ds : string, UserId : int} PRIMARY KEY Id,
+      CONSTRAINT NM_IS_UNIQUE UNIQUE Nm,
+      CONSTRAINT USER_ID_IS_FOREIGN_KEY FOREIGN KEY UserId REFERENCES userTable (Id)      
 
 table projectTaskTable : {ProjectId : int, TaskId : int} PRIMARY KEY (ProjectId, TaskId),
       CONSTRAINT PROJECT_ID_IS_FOREIGN_KEY FOREIGN KEY ProjectId REFERENCES projectTable (Id),
@@ -34,6 +39,9 @@ structure Service = TimeSheet.MakeService (struct
 					       val rowTable = taskTable
 					       val groupRowTable = projectTaskTable
 					       val cellTable = entryTable
+					       val groupQueryPredicate = (WHERE G.UserId = 1)
+					       val rowQueryPredicate = (WHERE G.UserId = 1 AND R.UserId = 1)
+					       val cellQueryPredicate = (WHERE G.UserId = 1 AND R.UserId = 1)
 					   end)
 ```
 
