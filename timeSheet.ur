@@ -53,7 +53,7 @@ signature MAKE_SERVICE_ARGUMENTS = sig
     constraint [Pkey = [groupTablePrimaryKeyColumnName]] ~ groupTableOtherConstraints
     val groupTable : sql_table ([groupTablePrimaryKeyColumnName = groupTablePrimaryKeyColumnType,
 				 groupTableOrderingColumnName = groupTableOrderingColumnType] ++ groupTableOtherColumns)
-			       ([Pkey = [groupTablePrimaryKeyColumnName]] ++ groupTableOtherConstraints)		     
+			       ([Pkey = [groupTablePrimaryKeyColumnName]] ++ groupTableOtherConstraints)
 
     con rowTablePrimaryKeyColumnName :: Name
     con rowTablePrimaryKeyColumnType :: Type
@@ -100,6 +100,26 @@ signature MAKE_SERVICE_ARGUMENTS = sig
 			      ([Pkey = [cellTableGroupForeignKeyColumnName,
 					cellTableRowForeignKeyColumnName,
 					cellTableDateColumnName]] ++ cellTableOtherConstraints)
+
+    val groupQueryPredicate : sql_exp [G = [groupTablePrimaryKeyColumnName = groupTablePrimaryKeyColumnType,
+					    groupTableOrderingColumnName = groupTableOrderingColumnType] ++ groupTableOtherColumns] [] [] bool
+
+    val rowQueryPredicate : sql_exp [G = [groupTablePrimaryKeyColumnName = groupTablePrimaryKeyColumnType, 
+					  groupTableOrderingColumnName = groupTableOrderingColumnType] ++ groupTableOtherColumns,
+				     GR = [groupRowTableGroupForeignKeyColumnName = groupTablePrimaryKeyColumnType, 
+					   groupRowTableRowForeignKeyColumnName = rowTablePrimaryKeyColumnType] ++ groupRowTableOtherColumns,
+				     R = [rowTablePrimaryKeyColumnName = rowTablePrimaryKeyColumnType,
+					  rowTableOrderingColumnName = rowTableOrderingColumnType] ++ rowTableOtherColumns] [] [] bool
+
+    val cellQueryPredicate : sql_exp [G = [groupTablePrimaryKeyColumnName = groupTablePrimaryKeyColumnType, 
+					   groupTableOrderingColumnName = groupTableOrderingColumnType] ++ groupTableOtherColumns,
+				      GR = [groupRowTableGroupForeignKeyColumnName = groupTablePrimaryKeyColumnType, 
+					    groupRowTableRowForeignKeyColumnName = rowTablePrimaryKeyColumnType] ++ groupRowTableOtherColumns,
+				      R = [rowTablePrimaryKeyColumnName = rowTablePrimaryKeyColumnType,
+					   rowTableOrderingColumnName = rowTableOrderingColumnType] ++ rowTableOtherColumns,
+				      C = [cellTableGroupForeignKeyColumnName = groupTablePrimaryKeyColumnType, 
+					   cellTableRowForeignKeyColumnName = rowTablePrimaryKeyColumnType, 
+					   cellTableDateColumnName = time] ++ cellTableOtherColumns] [] [] bool
 end
 
 con concat (nm :: Name) (t :: Type) (r :: {Type}) = [[nm] ~ map (fn _ => ()) r] => $([nm = t] ++ r)
@@ -142,8 +162,8 @@ functor MakeService (A : MAKE_SERVICE_ARGUMENTS) : SERVICE where type cellConten
 			       INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName}
 			       INNER JOIN cellTable AS C ON C.{cellTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
 			       AND C.{cellTableRowForeignKeyColumnName} = R.{rowTablePrimaryKeyColumnName}
-			     WHERE
-			       {[startTime]} <= C.{cellTableDateColumnName}
+			     WHERE {cellQueryPredicate}
+			       AND {[startTime]} <= C.{cellTableDateColumnName}
 			       AND C.{cellTableDateColumnName} <= {[endTime]});
 
 	    groupIdRowPairs <- query (SELECT
@@ -154,7 +174,8 @@ functor MakeService (A : MAKE_SERVICE_ARGUMENTS) : SERVICE where type cellConten
 				      FROM groupTable AS G
 					INNER JOIN groupRowTable AS GR ON GR.{groupRowTableGroupForeignKeyColumnName} = G.{groupTablePrimaryKeyColumnName}
 					INNER JOIN rowTable AS R ON R.{rowTablePrimaryKeyColumnName} = GR.{groupRowTableRowForeignKeyColumnName}
-				     ORDER BY R.{rowTableOrderingColumnName} DESC)
+				      WHERE {rowQueryPredicate}
+				      ORDER BY R.{rowTableOrderingColumnName} DESC)
 				     (fn r groupIdRowPairs =>
 					 let val cells = List.mp (fn date => {Id = {GroupId = r.GroupId,
 										    RowId = r.RowId,
@@ -178,6 +199,7 @@ functor MakeService (A : MAKE_SERVICE_ARGUMENTS) : SERVICE where type cellConten
 			       G.{groupTableOrderingColumnName},
 			       G.{{groupTableOtherColumns}}
 			     FROM groupTable AS G
+			     WHERE {groupQueryPredicate}
 			     ORDER BY G.{groupTableOrderingColumnName} DESC)
 			    (fn r groups =>
 				let val groupIdRowPairs = List.filter (fn (groupId, _) => groupId = r.Id) groupIdRowPairs

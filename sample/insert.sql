@@ -1,28 +1,31 @@
 delete from uw_Sample_projectTaskTable;
 delete from uw_Sample_taskTable;
 delete from uw_Sample_projectTable;
+delete from uw_Sample_userTable;
 
-insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds) values (1, 'Project 01', 'Project 01');
-insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds) values (2, 'Project 02', 'Project 02');
-insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds) values (3, 'Project 03', 'Project 03');
-insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds) values (4, 'Project 04', 'Project 04');
-insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds) values (5, 'Project 05', 'Project 05');
-insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds) values (6, 'Project 06', 'Project 06');
-insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds) values (7, 'Project 07', 'Project 07');
-insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds) values (8, 'Project 08', 'Project 08');
-insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds) values (9, 'Project 09', 'Project 09');
-insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds) values (10, 'Project 10', 'Project 10');
+insert into uw_Sample_userTable (uw_id, uw_nm) values (1, 'Saulo Medeiros de Araujo');
 
-insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds) values (1, 'Task 01', 'Task 01');
-insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds) values (2, 'Task 02', 'Task 02');
-insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds) values (3, 'Task 03', 'Task 03');
-insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds) values (4, 'Task 04', 'Task 04');
-insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds) values (5, 'Task 05', 'Task 05');
-insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds) values (6, 'Task 06', 'Task 06');
-insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds) values (7, 'Task 07', 'Task 07');
-insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds) values (8, 'Task 08', 'Task 08');
-insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds) values (9, 'Task 09', 'Task 09');
-insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds) values (10, 'Task 10', 'Task 10');
+insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds, uw_userid) values (1, 'Project 01', 'Project 01', 1);
+insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds, uw_userid) values (2, 'Project 02', 'Project 02', 1);
+insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds, uw_userid) values (3, 'Project 03', 'Project 03', 1);
+insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds, uw_userid) values (4, 'Project 04', 'Project 04', 1);
+insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds, uw_userid) values (5, 'Project 05', 'Project 05', 1);
+insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds, uw_userid) values (6, 'Project 06', 'Project 06', 1);
+insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds, uw_userid) values (7, 'Project 07', 'Project 07', 1);
+insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds, uw_userid) values (8, 'Project 08', 'Project 08', 1);
+insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds, uw_userid) values (9, 'Project 09', 'Project 09', 1);
+insert into uw_Sample_projectTable (uw_id, uw_nm, uw_ds, uw_userid) values (10, 'Project 10', 'Project 10', 1);
+
+insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds, uw_userid) values (1, 'Task 01', 'Task 01', 1);
+insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds, uw_userid) values (2, 'Task 02', 'Task 02', 1);
+insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds, uw_userid) values (3, 'Task 03', 'Task 03', 1);
+insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds, uw_userid) values (4, 'Task 04', 'Task 04', 1);
+insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds, uw_userid) values (5, 'Task 05', 'Task 05', 1);
+insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds, uw_userid) values (6, 'Task 06', 'Task 06', 1);
+insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds, uw_userid) values (7, 'Task 07', 'Task 07', 1);
+insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds, uw_userid) values (8, 'Task 08', 'Task 08', 1);
+insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds, uw_userid) values (9, 'Task 09', 'Task 09', 1);
+insert into uw_Sample_taskTable (uw_id, uw_nm, uw_ds, uw_userid) values (10, 'Task 10', 'Task 10', 1);
 
 insert into uw_Sample_projectTaskTable (uw_projectid, uw_taskid) values (1, 1);
 insert into uw_Sample_projectTaskTable (uw_projectid, uw_taskid) values (1, 2);
