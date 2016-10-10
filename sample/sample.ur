@@ -81,4 +81,4 @@ structure Theme = Ui.Make(struct
 			      val icon = None
 			  end)
 
-val application = Theme.simple "TimeSheet" S0.ui
+val application = Theme.simple "Time Sheet" S0.ui
